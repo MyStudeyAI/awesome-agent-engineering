@@ -106,13 +106,21 @@ def embed_texts(client: ZhipuAI, texts: list[str]) -> list[list[float]]:
 
     # 用本地 sentence-transformers 模型把文本变成向量
     model = get_local_model()
-    response = client.embeddings.create(
-        model=model,
-        input=texts,
-    )
+    # response = client.embeddings.create(
+    #     model=model,
+    #     input=texts,
+    # )
     # response.data 里的元素顺序和 input 一一对应；按 index 排好序保证不错位
-    sorted_data = sorted(response.data, key=lambda x: x.index)
-    return [item.embedding for item in sorted_data]
+    # sorted_data = sorted(response.data, key=lambda x: x.index)
+    # return [item.embedding for item in sorted_data]
+
+    embeddings = model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    )
+    return embeddings.tolist()
 
 
 # ════════════════════════════════════════════════════════════
