@@ -45,7 +45,9 @@ from sentence_transformers import SentenceTransformer
 # EMBEDDING_MODEL = "embedding-3"    # 智谱向量模型，默认输出 2048 维向量
 LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
 CHAT_MODEL = "glm-4-flash"               # 智谱对话模型；想免费可换成 "glm-4-flash"
-TOP_K = 5                          # 每次检索返回最相关的几段
+# TOP_K = 5                         # 每次检索返回最相关的几段
+# answer 3
+TOP_K = 2
 COLLECTION_NAME = "acme_handbook"  # Chroma 里这个"集合"的名字
 CHROMA_PATH = "./chroma_db"        # Chroma 数据存在本地哪个文件夹
 
@@ -77,7 +79,11 @@ KNOWLEDGE = [
 
 # 要问的问题。运行后可以改这里试不同问题。
 # QUESTION = "我在公司干了 4 年，能休几天年假？"
-QUESTION = "我在公司干了 4 年，能休几天年假？"
+# answer 1
+# QUESTION = "公司中午能休息多久？"
+# QUESTION = "我生病了怎么请假？"
+# QUESTION = "请告诉我公司的 wifi 密码"
+QUESTION = "下午茶几点？"
 
 
 # ════════════════════════════════════════════════════════════
@@ -189,12 +195,14 @@ def generate_answer(client: ZhipuAI, question: str, context_docs: list[str]) -> 
         f"【材料{i + 1}】{doc}" for i, doc in enumerate(context_docs)
     )
 
-    prompt = (
-        f"你是一个严谨的问答助手。请只根据下面提供的材料回答用户问题。"
-        f"如果材料里没有相关信息，请直接回答“我不知道”，不要编造。\n\n"
-        f"【材料】\n{context_text}\n\n"
-        f"【用户问题】{question}"
-    )
+    # prompt = (
+    #     f"你是一个严谨的问答助手。请只根据下面提供的材料回答用户问题。"
+    #     f"如果材料里没有相关信息，请直接回答“我不知道”，不要编造。\n\n"
+    #     f"【材料】\n{context_text}\n\n"
+    #     f"【用户问题】{question}"
+    # )
+    # answer 4
+    prompt = QUESTION  # 直接问，不给任何材料
 
     response = client.chat.completions.create(
         model=CHAT_MODEL,
