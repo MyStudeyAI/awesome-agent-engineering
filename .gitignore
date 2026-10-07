@@ -12,6 +12,10 @@ venv/
 chroma_db/
 chroma_db_*/
 
+# 本地model
+/model
+*/model
+
 # 系统/编辑器
 .DS_Store
 .idea/

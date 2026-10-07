@@ -24,10 +24,11 @@ except ImportError:
 import os
 from pathlib import Path
 
-# project_root = Path(__file__).resolve().parent.parent   # -> .../huggingFace-learn
-project_root = Path(os.getcwd()).parent
+project_root = Path(__file__).resolve().parent.parent
 model_dir = project_root / "model"
 model_dir.mkdir(parents=True, exist_ok=True)
+
+print(f"📁 模型缓存目录：{model_dir}")   # 打印出来，方便你确认
 
 # hugging face镜像设置，如果国内环境无法使用启用该设置
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
