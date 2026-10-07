@@ -22,19 +22,43 @@ except ImportError:
     pass  # 没装 pysqlite3 也没关系（Python 3.9+ 自带的 sqlite3 够新）
 
 import os
+from pathlib import Path
+
+# project_root = Path(__file__).resolve().parent.parent   # -> .../huggingFace-learn
+project_root = Path(os.getcwd()).parent
+model_dir = project_root / "model"
+model_dir.mkdir(parents=True, exist_ok=True)
+
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = str(model_dir)
 
 import chromadb
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
+from sentence_transformers import SentenceTransformer
 
 # ──────────────────────────────────────────────────────────────
 # 常量配置：模型名、检索数量等。初学先不用动这里。
 # ──────────────────────────────────────────────────────────────
-EMBEDDING_MODEL = "embedding-3"    # 智谱向量模型，默认输出 2048 维向量
-CHAT_MODEL = "glm-4"               # 智谱对话模型；想免费可换成 "glm-4-flash"
+# EMBEDDING_MODEL = "embedding-3"    # 智谱向量模型，默认输出 2048 维向量
+LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
+CHAT_MODEL = "glm-4-flash"               # 智谱对话模型；想免费可换成 "glm-4-flash"
 TOP_K = 5                          # 每次检索返回最相关的几段
 COLLECTION_NAME = "acme_handbook"  # Chroma 里这个"集合"的名字
 CHROMA_PATH = "./chroma_db"        # Chroma 数据存在本地哪个文件夹
+
+# 全局加载一次，避免每次调用都重新加载
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        print(f"⏳ 正在加载本地向量模型 {LOCAL_EMBEDDING_MODEL_NAME} ...")
+        _local_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL_NAME)
+        print("✅ 本地向量模型加载完成")
+    return _local_model
+
 
 # ──────────────────────────────────────────────────────────────
 # 知识库：几条"员工手册"的精简知识。
@@ -79,8 +103,11 @@ def embed_texts(client: ZhipuAI, texts: list[str]) -> list[list[float]]:
     返回值是一个列表的列表：每个文本对应一个向量（一串浮点数）。
     语义相近的文本，向量在空间里也离得近——这是后面"检索"能成立的基础。
     """
+
+    # 用本地 sentence-transformers 模型把文本变成向量
+    model = get_local_model()
     response = client.embeddings.create(
-        model=EMBEDDING_MODEL,
+        model=model,
         input=texts,
     )
     # response.data 里的元素顺序和 input 一一对应；按 index 排好序保证不错位
