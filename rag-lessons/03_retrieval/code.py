@@ -231,7 +231,7 @@ def section_metadata_filter(collection, doc_vectors, query_vec):
 
     print("\n【过滤 category='报销'】Top-3：")
     print("\n【暴力检索】过滤查询")
-    brute = brute_force_search(doc_vectors, query_vec, DOCUMENTS, top_k=3, metadatas=METADATA, category_filter={"category": "远程"})
+    brute = brute_force_search(doc_vectors, query_vec, DOCUMENTS, top_k=3, metadatas=METADATA, category_filter="远程")
     for doc, dist in brute:
         print(f"  {1 - dist:.4f} | {doc}")
 

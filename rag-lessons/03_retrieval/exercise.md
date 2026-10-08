@@ -66,3 +66,4 @@ def brute_force_search_with_filter(doc_vectors, query_vec, docs, metadatas, top_
 3. Top-K 是越大越好吗？为什么？
 4. cosine 和 l2 这两种度量有什么区别？RAG 为什么默认用 cosine？
 5. metadata 过滤解决什么问题？有什么副作用？
+> metadata 过滤解决“向量相似但业务不匹配”的问题，尤其适合权限、多租户、时效、版本、分类等硬约束；副作用是可能降低召回、增加延迟、提高维护复杂度，并带来一致性和安全风险。
