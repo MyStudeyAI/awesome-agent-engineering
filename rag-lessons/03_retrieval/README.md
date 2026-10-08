@@ -127,7 +127,7 @@ collection.query(
 ## 6. 跑起来
 
 ```bash
-python lessons/03_retrieval/code.py
+python rag-lessons/03_retrieval/code.py
 ```
 
 终端会打印每一步的对比结果。重点观察：

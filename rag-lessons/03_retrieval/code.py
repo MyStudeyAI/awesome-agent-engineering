@@ -7,21 +7,44 @@ Lesson 03 — 向量检索：从相似到 Top-K
     ③ metadata 过滤（先按标签筛选，再做向量检索）
     ④ 距离度量对比（cosine vs l2）
 
-运行：python lessons/03_retrieval/code.py
+运行：python rag-lessons/03_retrieval/code.py
 """
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+model_dir = project_root / "model"
+model_dir.mkdir(parents=True, exist_ok=True)
+
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = str(model_dir)
+
 import time
 
 import chromadb
 import numpy as np
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
+from sentence_transformers import SentenceTransformer
 
-EMBEDDING_MODEL = "embedding-3"
+# EMBEDDING_MODEL = "embedding-3"
+LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
 COLLECTION_NAME = "lesson03_docs"
 CHROMA_PATH = "./chroma_db_03"
+
+# 全局加载一次，避免每次调用都重新加载
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        print(f"⏳ 正在加载本地向量模型 {LOCAL_EMBEDDING_MODEL_NAME} ...")
+        _local_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL_NAME)
+        print("✅ 本地向量模型加载完成")
+    return _local_model
 
 # ──────────────────────────────────────────────────────────────
 # 文档集：8 条员工手册知识，每条带 category 标签（供 metadata 过滤演示）
@@ -47,8 +70,8 @@ METADATA = [
     {"category": "远程"},
 ]
 
-#QUESTION = "我出差住了两晚酒店，能报多少住宿费？"
-QUESTION = "我在家办公的时候生病了，能请病假吗？"
+QUESTION = "我出差住了两晚酒店，能报多少住宿费？"
+# QUESTION = "我在家办公的时候生病了，能请病假吗？"
 
 
 def create_zhipu_client() -> ZhipuAI:
@@ -61,9 +84,19 @@ def create_zhipu_client() -> ZhipuAI:
 
 def embed_texts(client: ZhipuAI, texts: list[str]) -> np.ndarray:
     """批量向量化，返回 numpy 数组。"""
-    resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
-    sorted_data = sorted(resp.data, key=lambda x: x.index)
-    return np.array([d.embedding for d in sorted_data])
+    # resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    # sorted_data = sorted(resp.data, key=lambda x: x.index)
+    # return np.array([d.embedding for d in sorted_data])
+
+    # 用本地 sentence-transformers 模型把文本变成向量
+    model = get_local_model()
+    embeddings = model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    )
+    return embeddings
 
 
 def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
@@ -76,14 +109,24 @@ def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
 # ════════════════════════════════════════════════════════════
 def brute_force_search(
     doc_vectors: np.ndarray, query_vec: np.ndarray, docs: list[str], top_k: int
-) -> list[tuple[str, float]]:
+, metadatas = None, category_filter = None) -> list[tuple[str, float]]:
     """遍历所有文档向量，算相似度，排序取前 K。
 
     返回 [(文档, 相似度), ...]，相似度从高到低。
     """
-    sims = [cosine_sim(query_vec, dv) for dv in doc_vectors]
+    # sims = [cosine_sim(query_vec, dv) for dv in doc_vectors]
     # 按相似度从高到低排序，取前 top_k
-    ranked = sorted(zip(docs, sims), key=lambda x: x[1], reverse=True)
+    # ranked = sorted(zip(docs, sims), key=lambda x: x[1], reverse=True)
+    # return ranked[:top_k]
+
+    # 加一个 category_filter 参数
+    results= []
+    for i, dv in enumerate(iterable=doc_vectors):
+        if category_filter and metadatas[i]["category"] != category_filter:
+            continue  # 不符合类别的跳过
+        sim = cosine_sim(query_vec, dv)
+        results.append((docs[i], sim))
+    ranked = sorted(results, key=lambda x: x[1], reverse=True)
     return ranked[:top_k]
 
 
@@ -168,7 +211,7 @@ def section_top_k_experiment(collection, query_vec):
     print("👉 观察：K 越大，排后面的文档越来越不相关（噪声）。RAG 里 K 通常 3~5 起步。")
 
 
-def section_metadata_filter(collection, query_vec):
+def section_metadata_filter(collection, doc_vectors, query_vec):
     """第③部分：metadata 过滤。"""
     print("\n" + "═" * 60)
     print("③ metadata 过滤（只在'报销'类里检索）")
@@ -177,10 +220,22 @@ def section_metadata_filter(collection, query_vec):
     print(f"\n问题：{QUESTION}\n")
 
     print("【不过滤】Top-3：")
+    print("\n【暴力检索】不过滤查询")
+    brute = brute_force_search(doc_vectors, query_vec, DOCUMENTS, top_k=3)
+    for doc, dist in brute:
+        print(f"  {1 - dist:.4f} | {doc}")
+
+    print("\n【Chroma 检索】不过滤查询")
     for doc, dist in chroma_search(collection, query_vec, top_k=3):
         print(f"  {1 - dist:.4f} | {doc}")
 
     print("\n【过滤 category='报销'】Top-3：")
+    print("\n【暴力检索】过滤查询")
+    brute = brute_force_search(doc_vectors, query_vec, DOCUMENTS, top_k=3, metadatas=METADATA, category_filter={"category": "远程"})
+    for doc, dist in brute:
+        print(f"  {1 - dist:.4f} | {doc}")
+
+    print("\n【Chroma 检索】不过滤查询")
     for doc, dist in chroma_search(collection, query_vec, top_k=3, where={"category": "远程"}):
         print(f"  {1 - dist:.4f} | {doc}")
 
@@ -239,13 +294,13 @@ def main():
     collection = section_brute_vs_chroma(client, doc_vectors, query_vec)
 
     # ② Top-K 实验
-    #section_top_k_experiment(collection, query_vec)
+    # section_top_k_experiment(collection, query_vec)
 
     # ③ metadata 过滤
-    section_metadata_filter(collection, query_vec)
+    section_metadata_filter(collection, doc_vectors,query_vec)
 
     # ④ 距离度量对比
-    #section_distance_metrics(doc_vectors, query_vec)
+    # section_distance_metrics(doc_vectors, query_vec)
 
     print("\n" + "=" * 60)
     print("完成！你现在理解了检索的本质：算距离 + 排序 + 取 Top-K。")
