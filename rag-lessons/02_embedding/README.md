@@ -120,7 +120,7 @@ cos(θ) = ───────────────────────�
 ## 5. 跑起来
 
 ```bash
-python lessons/02_embedding/code.py
+python rag-lessons/02_embedding/code.py
 ```
 
 运行后：

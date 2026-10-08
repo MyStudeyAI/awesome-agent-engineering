@@ -1,6 +1,6 @@
 # Lesson 02 练习
 
-> 改 `code.py` 里对应的代码，运行 `python lessons/02_embedding/code.py` 观察变化。
+> 改 `code.py` 里对应的代码，运行 `python rag-lessons/02_embedding/code.py` 观察变化。
 > 每次改完重新跑，重点看终端的相似度矩阵和弹出的图表。
 
 ---

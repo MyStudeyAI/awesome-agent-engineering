@@ -12,18 +12,40 @@ Lesson 02 — 深入 Embedding：向量如何表示语义
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+model_dir = project_root / "model"
+model_dir.mkdir(parents=True, exist_ok=True)
+
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = str(model_dir)
 
 import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
 from sklearn.decomposition import PCA
 from zhipuai import ZhipuAI
+from sentence_transformers import SentenceTransformer
 
 # 让 matplotlib 支持中文（Windows 上常用字体）
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]
 plt.rcParams["axes.unicode_minus"] = False  # 负号显示
 
 EMBEDDING_MODEL = "embedding-3"
+LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
+
+# 全局加载一次，避免每次调用都重新加载
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        print(f"⏳ 正在加载本地向量模型 {LOCAL_EMBEDDING_MODEL_NAME} ...")
+        _local_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL_NAME)
+        print("✅ 本地向量模型加载完成")
+    return _local_model
 
 # ──────────────────────────────────────────────────────────────
 # 实验句子：故意分成 3 组语义，方便你观察"同组相似度高、跨组相似度低"。
@@ -31,6 +53,7 @@ EMBEDDING_MODEL = "embedding-3"
 # ──────────────────────────────────────────────────────────────
 SENTENCES = [
     # 第 1 组：年假/休息（带薪假）
+    "年假5天。",
     "入职满一年有 5 天带薪年假。",
     "员工工作满三年可享有 10 天年假。",
     "公司每年提供带薪休假福利。",
@@ -48,7 +71,7 @@ SENTENCES = [
     "年假5天。",
 ]
 # 给每个句子打一个组标签，方便在图上用颜色区分
-GROUP_LABELS = ["年假", "年假", "年假", "报销", "报销", "远程", "远程", "远程", "天气", "远程", "远程", "年假"]
+GROUP_LABELS = ["年假", "年假", "年假", "年假", "报销", "报销", "远程", "远程", "远程", "天气", "远程", "远程", "年假"]
 # 每组一个颜色
 GROUP_COLORS = {"年假": "red", "报销": "blue", "远程": "green", "天气": "gray"}
 
@@ -66,10 +89,21 @@ def create_zhipu_client() -> ZhipuAI:
 
 def embed_texts(client: ZhipuAI, texts: list[str]) -> np.ndarray:
     """把文本变成向量，返回 numpy 数组（形状：[句子数, 维度]）。"""
-    response = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
-    sorted_data = sorted(response.data, key=lambda x: x.index)
-    vectors = [item.embedding for item in sorted_data]
-    return np.array(vectors)
+    # response = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    # sorted_data = sorted(response.data, key=lambda x: x.index)
+    # vectors = [item.embedding for item in sorted_data]
+    # return np.array(vectors)
+
+    # 用本地 sentence-transformers 模型把文本变成向量
+    model = get_local_model()
+    embeddings = model.encode(
+            texts,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+    # return np.array(embeddings.tolist())
+    return embeddings
 
 
 def cosine_similarity_matrix(vectors: np.ndarray) -> np.ndarray:
@@ -79,6 +113,7 @@ def cosine_similarity_matrix(vectors: np.ndarray) -> np.ndarray:
     向量化实现：先归一化（除以各自的长度），再算点积。
     """
     # 每个向量除以它自己的长度 → 变成单位向量（长度=1）
+    # keepdims=True 的意思是：保持维度数量。
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)  # 每行的向量长度
     normalized = vectors / norms  # 归一化
     # 单位向量之间点积 = 余弦相似度
@@ -205,6 +240,15 @@ def main():
     print("完成！如果散点图里同色点聚成一团，说明 embedding 成功捕捉了语义。")
     print("=" * 60)
 
+
+    # 临时加在 main() 末尾跑
+    import numpy as np
+    a, b = vectors[0], vectors[1]
+    dot = np.dot(a, b)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    cos = dot / (norm_a * norm_b)
+    print(f"点积={dot:.2f}, |a|={norm_a:.2f}, |b|={norm_b:.2f}, cos={cos:.4f}")
 
 if __name__ == "__main__":
     main()
