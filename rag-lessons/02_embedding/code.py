@@ -6,7 +6,7 @@ Lesson 02 — 深入 Embedding：向量如何表示语义
     ② 计算多个句子两两的余弦相似度，打印成矩阵（看相似/无关的差异）
     ③ 用 PCA 把高维向量降到 2D，画散点图（看相似句子聚成一团）
 
-运行：python lessons/02_embedding/code.py
+运行：python rag-lessons/02_embedding/code.py
 运行后会弹出一个图表窗口，关掉窗口程序才结束。
 """
 from __future__ import annotations

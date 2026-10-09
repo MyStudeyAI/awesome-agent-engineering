@@ -111,7 +111,7 @@ chunk_overlap：相邻块之间的重叠长度
 ## 6. 跑起来
 
 ```bash
-python lessons/04_chunking/code.py
+python rag-lessons/04_chunking/code.py
 ```
 
 终端会打印三种 chunk_size 切出来的所有块。重点观察：

@@ -6,7 +6,7 @@ Lesson 04 — 文档处理：加载与切块 (Chunking)
     ② 用 chunk_size = 200 / 500 / 1000 分别切，对比结果
     ③ 演示 RecursiveCharacterTextSplitter（推荐切法）+ overlap 的作用
 
-运行：python lessons/04_chunking/code.py
+运行：python rag-lessons/04_chunking/code.py
 （本课不调用大模型 API，纯本地切分，不花钱）
 """
 from __future__ import annotations
@@ -59,6 +59,21 @@ def section_compare_chunk_sizes(text: str):
     print("  - size=200：块很碎，很多半句话，语义不完整")
     print("  - size=1000：块太大，一块里混了好几个主题（请假+报销+远程）")
     print("  - size=500：相对均衡，每块基本是一个完整主题")
+
+    # practice one
+    # splitter = RecursiveCharacterTextSplitter(
+    #     chunk_size=100,
+    #     chunk_overlap=0,  # 先不加重叠，纯粹看 size 的影响
+    #     separators=["",],
+    # )
+    # chunks = splitter.split_text(text)
+    # print(f"\n【chunk_size={100}】")
+    # show_stats(f"size={100}", chunks)
+    # # 打印前 3 块让你直观感受
+    # print("  前 3 块预览：")
+    # for i, c in enumerate(chunks[:3], 1):
+    #     preview = c.replace("\n", " ")
+    #     print(f"    [{i}] ({len(c)}字) {preview}...")
 
 
 def section_recursive_with_overlap(text: str):

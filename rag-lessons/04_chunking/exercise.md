@@ -1,6 +1,6 @@
 # Lesson 04 练习
 
-> 改 `code.py` 里的代码，运行 `python lessons/04_chunking/code.py` 观察变化。
+> 改 `code.py` 里的代码，运行 `python rag-lessons/04_chunking/code.py` 观察变化。
 > 本课不调用 API，纯本地切分，随便试不花钱。
 
 ---
