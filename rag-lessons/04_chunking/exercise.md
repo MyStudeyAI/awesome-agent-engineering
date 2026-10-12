@@ -63,5 +63,7 @@ from zhipuai import ZhipuAI
 1. 为什么不能把整篇文档直接向量化存进向量库？（三个原因）
 2. chunk_size 太大和太小各有什么问题？经验值是多少？
 3. chunk_overlap 解决什么问题？为什么不能设太大？
+> 它解决的是边界截断问题
+
 4. RecursiveCharacterTextSplitter 的 separators 优先级是怎么工作的？
 5. 为什么说"一个 chunk = 一个语义单元"是检索精准的基础？
