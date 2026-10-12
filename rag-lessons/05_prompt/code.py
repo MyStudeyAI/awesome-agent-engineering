@@ -51,6 +51,8 @@ KNOWLEDGE = [
     "病假需提供三甲医院病假条，期间发基本工资的 60%。连续病假超过 3 天需提供住院证明。",
     "餐饮报销每人每餐不超过 80 元，差旅住宿一线城市不超过 500 元每晚。报销单需 30 天内提交。",
     "每周可远程办公最多 2 个工作日，需直属上级批准。试用期员工不适用远程办公。",
+    "年假最多 5 天，无论工龄多久。",
+    "年假制度：入职满 1 年有 5 天，满 3 年有 10 天，满 5 年有 15 天。",
 ]
 
 
@@ -144,6 +146,21 @@ def build_safe_prompt(question: str, docs: list[str]) -> str:
         f"【问题】{question}"
     )
 
+def build_custom_prompt(question: str, docs: list[str]) -> str:
+    """防幻觉 prompt：明确限定只能依据材料，没有就说不知道。"""
+    context = "\n\n".join(f"【材料{i+1}】{doc}" for i, doc in enumerate(docs))
+    return (
+        "你是一个严谨的问答助手。请遵守以下规则：\n"
+        "1. 只能根据下面提供的材料回答问题，不要使用材料以外的知识。\n"
+        "2. 如果材料里没有相关信息，请直接回答'我不知道'，不要编造。\n"
+        "3. 如果多条材料冲突，请指出冲突。\n\n"
+        "4. 答案不超过 100 字\n\n"
+        "5. 用'第一、第二、第三'分点陈述\n\n"
+        "6. 如果材料不足，建议用户补充什么信息\n\n"
+        f"【材料】\n{context}\n\n"
+        f"【问题】{question}"
+    )
+
 
 def section_anti_hallucination(client, collection):
     """第①部分：用文档里没有的问题，对比两种 prompt。"""
@@ -152,7 +169,8 @@ def section_anti_hallucination(client, collection):
     print("═" * 60)
 
     # 注意：这个问题的答案不在 KNOWLEDGE 里
-    out_of_scope = "公司的 wifi 密码是多少？茶水间在哪一层？"
+    # out_of_scope = "公司的 wifi 密码是多少？茶水间在哪一层？"
+    out_of_scope = "年假有几天？"
     # 但为了演示，我们还是检索一下（会返回最不相关的几条）
     docs = retrieve(client, collection, out_of_scope, top_k=2)
     print(f"\n问题：{out_of_scope}")
@@ -167,7 +185,8 @@ def section_anti_hallucination(client, collection):
 
     # 防幻觉 prompt
     print("\n【防幻觉 prompt】（限定只依据材料，没有就说不知道）：")
-    safe_answer = chat(client, build_safe_prompt(out_of_scope, docs))
+    # safe_answer = chat(client, build_safe_prompt(out_of_scope, docs))
+    safe_answer = chat(client, build_custom_prompt(out_of_scope, docs))
     print(f"  → {safe_answer}")
 
     print("\n👉 观察：无约束时模型可能会瞎编一个 wifi 密码；")
@@ -222,8 +241,14 @@ def section_streaming(client, collection):
 
     print(f"\n问题：{question}")
     print("\n🤖 模型回答（流式）：")
-    for piece in chat_stream(client, prompt):
-        print(piece, end="", flush=True)  # end="" 不换行，flush=True 立即显示
+    # 流式（原版）
+    # for piece in chat_stream(client, prompt):
+    #     print(piece, end="", flush=True)  # end="" 不换行，flush=True 立即显示
+
+    # 非流式（改这样）
+    answer = chat(client, prompt)
+    print(answer)
+
     print()  # 最后补一个换行
     print("\n👉 观察：流式输出让用户不用等整段生成完才看到结果，体验更好。")
     print("   生产环境（网页/App）几乎都用流式，提升感知速度。")
