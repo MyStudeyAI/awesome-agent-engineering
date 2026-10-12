@@ -7,21 +7,43 @@ Lesson 06 — 进阶检索：混合检索 + Rerank
     ③ 混合检索（RRF 融合向量+BM25）
     ④ Rerank 重排序（召回+精排两段式）
 
-运行：python lessons/06_advanced_retrieval/code.py
+运行：python rag-lessons/06_advanced_retrieval/code.py
 """
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+model_dir = project_root / "model"
+model_dir.mkdir(parents=True, exist_ok=True)
+
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = str(model_dir)
 
 import chromadb
 import numpy as np
 from rank_bm25 import BM25Okapi
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
+from sentence_transformers import SentenceTransformer
 
 EMBEDDING_MODEL = "embedding-3"
+LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
 COLLECTION_NAME = "lesson06_docs"
 CHROMA_PATH = "./chroma_db_06"
+
+# 全局加载一次，避免每次调用都重新加载
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        print(f"⏳ 正在加载本地向量模型 {LOCAL_EMBEDDING_MODEL_NAME} ...")
+        _local_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL_NAME)
+        print("✅ 本地向量模型加载完成")
+    return _local_model
 
 # ──────────────────────────────────────────────────────────────
 # 文档集：故意混入带编号/专有名词的文档，制造向量检索的翻车场景。
@@ -55,9 +77,19 @@ def create_zhipu_client() -> ZhipuAI:
 
 
 def embed_texts(client: ZhipuAI, texts: list[str]) -> np.ndarray:
-    resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
-    sorted_data = sorted(resp.data, key=lambda x: x.index)
-    return np.array([d.embedding for d in sorted_data])
+    # resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    # sorted_data = sorted(resp.data, key=lambda x: x.index)
+    # return np.array([d.embedding for d in sorted_data])
+
+    # 用本地 sentence-transformers 模型把文本变成向量
+        model = get_local_model()
+        embeddings = model.encode(
+            texts,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+        return embeddings
 
 
 def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:

@@ -152,7 +152,7 @@ RRF分数 = Σ  1 / (k + 排名)
 ## 6. 跑起来
 
 ```bash
-python lessons/06_advanced_retrieval/code.py
+python rag-lessons/06_advanced_retrieval/code.py
 ```
 
 终端会打印四种检索方式的 Top-K 结果对比。重点观察：含编号的文档在纯向量检索里排不上号，但在 BM25 和混合检索里排到了前面。

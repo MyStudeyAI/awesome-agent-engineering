@@ -1,6 +1,6 @@
 # Lesson 06 练习
 
-> 改 `code.py` 里的代码，运行 `python lessons/06_advanced_retrieval/code.py` 观察变化。
+> 改 `code.py` 里的代码，运行 `python rag-lessons/06_advanced_retrieval/code.py` 观察变化。
 > 本课会调用 embedding API（不调 chat，成本很低）。
 
 ---
