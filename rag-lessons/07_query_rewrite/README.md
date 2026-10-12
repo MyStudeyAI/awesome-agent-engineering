@@ -137,7 +137,7 @@ HyDE 的思路：**既然文档是陈述句，那我就让模型先编一个"假
 ## 6. 跑起来
 
 ```bash
-python lessons/07_query_rewrite/code.py
+python rag-lessons/07_query_rewrite/code.py
 ```
 
 终端会打印三种方式的检索结果对比。重点看：口语化烂问题在"直接检索"时召不准，改写后召回质量明显提升。

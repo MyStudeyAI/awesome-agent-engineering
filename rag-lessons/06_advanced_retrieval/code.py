@@ -80,14 +80,14 @@ def embed_texts(client: ZhipuAI, texts: list[str]) -> np.ndarray:
     # return np.array([d.embedding for d in sorted_data])
 
     # 用本地 sentence-transformers 模型把文本变成向量
-        model = get_local_model()
-        embeddings = model.encode(
-            texts,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
-        return embeddings
+    model = get_local_model()
+    embeddings = model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    )
+    return embeddings
 
 def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))

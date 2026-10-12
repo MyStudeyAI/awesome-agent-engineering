@@ -1,6 +1,6 @@
 # Lesson 07 练习
 
-> 改 `code.py` 里的代码，运行 `python lessons/07_query_rewrite/code.py` 观察变化。
+> 改 `code.py` 里的代码，运行 `python rag-lessons/07_query_rewrite/code.py` 观察变化。
 > 本课会调用 embedding + chat API（成本很低，特别是用 glm-4-flash）。
 
 ---
