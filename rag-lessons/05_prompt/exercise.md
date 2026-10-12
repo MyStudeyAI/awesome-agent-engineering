@@ -1,6 +1,6 @@
 # Lesson 05 练习
 
-> 改 `code.py` 里的代码，运行 `python lessons/05_prompt/code.py` 观察变化。
+> 改 `code.py` 里的代码，运行 `python rag-lessons/05_prompt/code.py` 观察变化。
 > 本课会真实调用 GLM，每次跑会消耗少量 token。
 
 ---

@@ -6,20 +6,42 @@ Lesson 05 — Prompt 工程：把检索结果喂给大模型
     ② 引用溯源：要求模型标注答案来自哪条材料
     ③ 流式输出：边生成边打印，体验真实产品效果
 
-运行：python lessons/05_prompt/code.py
+运行：python rag-lessons/05_prompt/code.py
 """
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+model_dir = project_root / "model"
+model_dir.mkdir(parents=True, exist_ok=True)
+
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = str(model_dir)
 
 import chromadb
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
+from sentence_transformers import SentenceTransformer
 
 EMBEDDING_MODEL = "embedding-3"
-CHAT_MODEL = "glm-4"  # 想免费可换成 "glm-4-flash"
+LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
+CHAT_MODEL = "glm-4-flash"  # 想免费可换成 "glm-4-flash"
 COLLECTION_NAME = "lesson05_kb"
 CHROMA_PATH = "./chroma_db_05"
+
+# 全局加载一次，避免每次调用都重新加载
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        print(f"⏳ 正在加载本地向量模型 {LOCAL_EMBEDDING_MODEL_NAME} ...")
+        _local_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL_NAME)
+        print("✅ 本地向量模型加载完成")
+    return _local_model
 
 # ──────────────────────────────────────────────────────────────
 # 知识库（和第 1 课类似，但稍丰富一些，方便演示引用溯源）
@@ -41,9 +63,19 @@ def create_zhipu_client() -> ZhipuAI:
 
 
 def embed_texts(client: ZhipuAI, texts: list[str]) -> list[list[float]]:
-    resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
-    sorted_data = sorted(resp.data, key=lambda x: x.index)
-    return [d.embedding for d in sorted_data]
+    # resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    # sorted_data = sorted(resp.data, key=lambda x: x.index)
+    # return [d.embedding for d in sorted_data]
+
+    # 用本地 sentence-transformers 模型把文本变成向量
+    model = get_local_model()
+    embeddings = model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    )
+    return embeddings.tolist()
 
 
 def build_knowledge_base(client: ZhipuAI):

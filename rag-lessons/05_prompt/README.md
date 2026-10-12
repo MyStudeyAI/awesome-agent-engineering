@@ -110,7 +110,7 @@
 ## 6. 跑起来
 
 ```bash
-python lessons/05_prompt/code.py
+python rag-lessons/05_prompt/code.py
 ```
 
 终端会打印三个实验的对比。重点看实验①——同一个问题，两种 prompt，模型回答天差地别。
