@@ -67,14 +67,12 @@ DOCUMENTS = [
 QUERY = "我想休个假放松一下，有什么政策？"
 # 正确答案应该是 DOCUMENTS[3]
 
-
 def create_zhipu_client() -> ZhipuAI:
     load_dotenv()
     api_key = os.getenv("ZHIPUAI_API_KEY")
     if not api_key or api_key.startswith("xxxx"):
         raise RuntimeError("请先在 .env 里配置 ZHIPUAI_API_KEY")
     return ZhipuAI(api_key=api_key)
-
 
 def embed_texts(client: ZhipuAI, texts: list[str]) -> np.ndarray:
     # resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
@@ -91,10 +89,8 @@ def embed_texts(client: ZhipuAI, texts: list[str]) -> np.ndarray:
         )
         return embeddings
 
-
 def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-
 
 def simple_tokenize(text: str) -> list[str]:
     """简易分词：英文按非字母数字切，中文按字切。
@@ -108,7 +104,6 @@ def simple_tokenize(text: str) -> list[str]:
     # 中文字符（每个字作为一个 token）
     tokens += [c for c in text if "\u4e00" <= c <= "\u9fff"]
     return [t.lower() for t in tokens]
-
 
 def build_chroma(doc_vectors: np.ndarray):
     db = chromadb.PersistentClient(path=CHROMA_PATH)
@@ -124,7 +119,6 @@ def build_chroma(doc_vectors: np.ndarray):
     )
     return col
 
-
 def print_results(label: str, ranked_docs: list[tuple[str, float]], top_k: int = 5):
     """打印检索结果。ranked_docs: [(doc, score)]，按分数从高到低。"""
     print(f"\n【{label}】Top-{top_k}：")
@@ -133,7 +127,6 @@ def print_results(label: str, ranked_docs: list[tuple[str, float]], top_k: int =
         mark = " ✅正确" if doc == DOCUMENTS[3] else ""
         print(f"  {i}. 分数={score:.4f} | {doc[:40]}...{mark}")
 
-
 # ════════════════════════════════════════════════════════════
 # 实验①：向量检索（看它怎么翻车）
 # ════════════════════════════════════════════════════════════
@@ -141,7 +134,6 @@ def vector_search(doc_vectors: np.ndarray, query_vec: np.ndarray) -> list[tuple]
     """向量检索：算余弦相似度排序。返回 [(doc, score)]。"""
     sims = [(DOCUMENTS[i], cosine_sim(query_vec, dv)) for i, dv in enumerate(doc_vectors)]
     return sorted(sims, key=lambda x: x[1], reverse=True)
-
 
 # ════════════════════════════════════════════════════════════
 # 实验②：BM25 关键词检索
@@ -153,7 +145,6 @@ def bm25_search(query: str) -> list[tuple]:
     scores = bm25.get_scores(simple_tokenize(query))
     ranked = sorted(zip(DOCUMENTS, scores), key=lambda x: x[1], reverse=True)
     return [(d, float(s)) for d, s in ranked]
-
 
 # ════════════════════════════════════════════════════════════
 # 实验③：混合检索（RRF 融合）
@@ -174,7 +165,29 @@ def rrf_fusion(
     for rank, (doc, _) in enumerate(bm25_results, 1):
         scores[doc] = scores.get(doc, 0) + 1 / (k + rank)
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+# ════════════════════════════════════════════════════════════
+# 实现加权融合（替代 RRF）
+def weighted_fusion(
+    vec_results: list[tuple], bm25_results: list[tuple], alpha=0.5
+) -> list[tuple]:
+    """加权融合。
 
+    公式：R最终分数 = α × 向量分数 + (1-α) × BM25分数
+    α 通常 0.5~0.7。
+    查询偏关键词时调高 BM25 权重，偏语义时调高向量权重。
+    """
+    """alpha 是向量检索的权重，1-alpha 是 BM25 的权重。"""
+    # 先把两路分数各自归一化到 0~1（因为量纲不同）
+    def normalize(results):
+        scores = np.array([s for _, s in results])
+        if scores.max() > scores.min():
+            scores = (scores - scores.min()) / (scores.max() - scores.min())
+        return {d: s for (d, _), s in zip(results, scores)}
+    vec_norm = normalize(vec_results)
+    bm25_norm = normalize(bm25_results)
+    all_docs = set(vec_norm) | set(bm25_norm)
+    fused = {d: alpha * vec_norm.get(d, 0) + (1 - alpha) * bm25_norm.get(d, 0) for d in all_docs}
+    return sorted(fused.items(), key=lambda x: x[1], reverse=True)
 
 # ════════════════════════════════════════════════════════════
 # 实验④：Rerank 重排序（召回+精排两段式）
@@ -197,7 +210,6 @@ def lightweight_rerank(query: str, candidate_docs: list[str]) -> list[tuple]:
             hit_rate = 0
         scored.append((doc, hit_rate))
     return sorted(scored, key=lambda x: x[1], reverse=True)
-
 
 def main():
     print("=" * 60)
@@ -240,6 +252,13 @@ def main():
     print("\n👉 观察：两路都认可（语义+关键词都匹配）的文档排到前面。")
     print("   正确答案的排名应该比纯向量检索更靠前。")
 
+    print("\n" + "═" * 60)
+    print("③ 加权融合")
+    print("═" * 60)
+    weighted_results = weighted_fusion(vec_results, bm25_results)
+    print_results("加权融合", weighted_results)
+    print("\n👉 观察：RRF 和 加权融合。")
+
     # ④ Rerank
     print("\n" + "═" * 60)
     print("④ Rerank 重排序（对混合检索召回的 Top-5 精排）")
@@ -254,7 +273,6 @@ def main():
     print("\n" + "=" * 60)
     print("完成！生产级 RAG 的标配：混合检索（召回）+ Rerank（精排）。")
     print("=" * 60)
-
 
 if __name__ == "__main__":
     main()
