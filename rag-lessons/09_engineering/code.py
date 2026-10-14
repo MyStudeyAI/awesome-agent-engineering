@@ -11,21 +11,32 @@ Lesson 09 — 工程化：交互式 RAG 问答助手（毕业作品）
     ✅ 交互式 REPL（持续问答，输 exit 退出）
     ✅ 防幻觉 prompt
 
-运行：python lessons/09_engineering/code.py
+运行：python rag-lessons/09_engineering/code.py
 然后输入问题开始问答，输 exit 退出。
 """
 from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+model_dir = project_root / "model"
+model_dir.mkdir(parents=True, exist_ok=True)
+
+# hugging face镜像设置，如果国内环境无法使用启用该设置
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = str(model_dir)
 
 import chromadb
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from zhipuai import ZhipuAI
+from sentence_transformers import SentenceTransformer
 
 EMBEDDING_MODEL = "embedding-3"
-CHAT_MODEL = "glm-4"  # 想免费可换 "glm-4-flash"
+LOCAL_EMBEDDING_MODEL_NAME = "BAAI/bge-small-zh-v1.5" # 本地向量模型：中文效果好、体积小（约 100MB）、512 维
+CHAT_MODEL = "glm-4-flash"  # 想免费可换 "glm-4-flash"
 COLLECTION_NAME = "lesson09_kb"
 CHROMA_PATH = "./chroma_db_09"
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "sample_docs")
@@ -33,6 +44,17 @@ DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "sample_d
 CHUNK_SIZE = 400
 CHUNK_OVERLAP = 60
 TOP_K = 3
+
+# 全局加载一次，避免每次调用都重新加载
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        print(f"⏳ 正在加载本地向量模型 {LOCAL_EMBEDDING_MODEL_NAME} ...")
+        _local_model = SentenceTransformer(LOCAL_EMBEDDING_MODEL_NAME)
+        print("✅ 本地向量模型加载完成")
+    return _local_model
 
 
 def create_client() -> ZhipuAI:
@@ -44,8 +66,18 @@ def create_client() -> ZhipuAI:
 
 
 def embed(client: ZhipuAI, texts: list[str]) -> list[list[float]]:
-    resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
-    return [d.embedding for d in sorted(resp.data, key=lambda x: x.index)]
+    # resp = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    # return [d.embedding for d in sorted(resp.data, key=lambda x: x.index)]
+
+    # 用本地 sentence-transformers 模型把文本变成向量
+    model = get_local_model()
+    embeddings = model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    )
+    return embeddings.tolist()
 
 
 def file_hash(path: str) -> str:
