@@ -56,7 +56,8 @@ DOCUMENTS = [
 ]
 
 # 故意用一个口语化、模糊的烂问题（直接检索效果差）
-RAW_QUERY = "我想歇几天，那个流程是啥？要啥材料不？"
+# RAW_QUERY = "我想歇几天，那个流程是啥？要啥材料不？"
+RAW_QUERY = "那个怎么弄？上次说的那个表。"
 # 正确答案：应该召回 DOCUMENTS[0]（年假申请流程）和 DOCUMENTS[1]（病假材料）
 
 
@@ -142,6 +143,39 @@ def rrf_merge_multi(results_list: list[list], k: int = 60, top_k: int = 3):
     return [(idx, docs_map[idx], score) for idx, score in ranked]
 
 
+def simple_tokenize(text: str) -> list[str]:
+    """简易分词：英文按非字母数字切，中文按字切。
+
+    真实场景会用 jieba 等专业分词器，这里用简易版保持依赖少。
+    """
+    import re
+
+    # 英文/数字 token
+    tokens = re.findall(r"[A-Za-z0-9]+", text)
+    # 中文字符（每个字作为一个 token）
+    tokens += [c for c in text if "\u4e00" <= c <= "\u9fff"]
+    return [t.lower() for t in tokens]
+
+def lightweight_rerank(query: str, candidate_docs: list[str]) -> list[tuple]:
+    """轻量 Rerank：基于查询与文档的精确匹配度重排。
+
+    ⚠️ 这是教学版简化实现，用"查询中关键 token 在文档中的命中率"来模拟
+       cross-encoder 的精排效果。真实生产请换 bge-reranker / 智谱 reranker，
+       流程完全一样，只是把这里的打分函数换成交叉编码器。
+    """
+    query_tokens = set(simple_tokenize(query))
+    scored = []
+    for doc in candidate_docs:
+        doc_tokens = set(simple_tokenize(doc))
+        # 查询 token 在文档中的命中率（精确匹配度）
+        if query_tokens:
+            hit_rate = len(query_tokens & doc_tokens) / len(query_tokens)
+        else:
+            hit_rate = 0
+        scored.append((doc, hit_rate))
+    return sorted(scored, key=lambda x: x[1], reverse=True)
+
+
 # ════════════════════════════════════════════════════════════
 # 实验①：原始 query 直接检索（基线）
 # ════════════════════════════════════════════════════════════
@@ -152,7 +186,7 @@ def section_raw_query(client, doc_vectors):
     print(f"\n原始问题：{RAW_QUERY}")
     query_vec = embed_texts(client, [RAW_QUERY])[0]
     results = vector_search(doc_vectors, query_vec, top_k=3)
-    print_results("直接检索", results, correct_indices=[0, 1])
+    # print_results("直接检索", results, correct_indices=[0, 1])
     print("\n👉 观察：口语化问题向量不够具体，可能召不准年假/病假那两条。")
     return query_vec
 
@@ -166,12 +200,14 @@ def section_hyde(client, doc_vectors):
     print("═" * 60)
 
     # ① 让 LLM 生成假设答案（一段像文档的陈述句）
-    hyde_prompt = (
-        f"请根据下面这个问题，写一段 50 字左右的'假设性答案'。"
-        f"要求：写成正式的公司制度陈述句（像真实文档那样），"
-        f"即使内容不完全准确也没关系，重点是格式像文档。\n\n"
-        f"问题：{RAW_QUERY}\n\n假设性答案："
-    )
+    # hyde_prompt = (
+    #     f"请根据下面这个问题，写一段 50 字左右的'假设性答案'。"
+    #     f"要求：写成正式的公司制度陈述句（像真实文档那样），"
+    #     f"即使内容不完全准确也没关系，重点是格式像文档。\n\n"
+    #     f"问题：{RAW_QUERY}\n\n假设性答案："
+    # )
+    # hyde_prompt = f"请准确回答：{RAW_QUERY}"
+    hyde_prompt = f"写一段50字左右的公司制度陈述句，回答这个问题：{RAW_QUERY}"
     hypothetical_doc = chat(client, hyde_prompt).strip()
     print(f"\n②-1 LLM 生成的假设答案：")
     print(f"  {hypothetical_doc}")
@@ -193,13 +229,19 @@ def section_multi_query(client, doc_vectors):
     print("═" * 60)
 
     # ① 让 LLM 把原问题拆成多个子问题
+    # multi_prompt = (
+    #     f"请把下面这个用户问题，拆解成 3 个更具体、更适合检索的子问题。"
+    #     f"每个子问题单独一行，只输出问题本身，不要编号和其他内容。\n\n"
+    #     f"用户问题：{RAW_QUERY}\n\n3 个子问题："
+    # )
     multi_prompt = (
-        f"请把下面这个用户问题，拆解成 3 个更具体、更适合检索的子问题。"
+        f"请把下面这个用户问题，拆解成 5 个更具体、更适合检索的子问题。"
         f"每个子问题单独一行，只输出问题本身，不要编号和其他内容。\n\n"
-        f"用户问题：{RAW_QUERY}\n\n3 个子问题："
+        f"用户问题：{RAW_QUERY}\n\n5 个子问题："
     )
     sub_queries_text = chat(client, multi_prompt).strip()
-    sub_queries = [q.strip() for q in sub_queries_text.split("\n") if q.strip()][:3]
+    # sub_queries = [q.strip() for q in sub_queries_text.split("\n") if q.strip()][:3]
+    sub_queries = [q.strip() for q in sub_queries_text.split("\n") if q.strip()][:5]
     print(f"\n③-1 LLM 拆出的子问题：")
     for i, q in enumerate(sub_queries, 1):
         print(f"  {i}. {q}")
@@ -215,10 +257,20 @@ def section_multi_query(client, doc_vectors):
         print(f"  子问题{i+1} → Top1: [{top_idx}] {DOCUMENTS[top_idx][:30]}...")
 
     # ③ RRF 融合
-    merged = rrf_merge_multi(all_results, top_k=3)
+    # merged = rrf_merge_multi(all_results, top_k=3)
+    merged = rrf_merge_multi(all_results, top_k=5)
     print_results("多查询融合 (RRF)", merged, correct_indices=[0, 1])
 
     print("\n👉 观察：多角度覆盖后，年假和病假两条正确答案都更容易被召回。")
+
+
+    # 引入第6课的 rerank 思路
+    candidates = [doc for _, doc, _ in merged]
+    # 用查询重新 rerank（这里用原始 query 或子问题拼接）
+    reranked = lightweight_rerank(RAW_QUERY, candidates)[:3]
+    print_results("Rerank 后", reranked)
+    print("\n👉 观察：精排后，含 FORM-A12 的文档应该稳稳排到第一。")
+    print("   这就是召回+精排两段式：先粗筛（高召回），再精选（高精度）。")
 
 
 def main():
