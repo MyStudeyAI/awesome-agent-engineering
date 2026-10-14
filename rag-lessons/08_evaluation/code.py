@@ -251,8 +251,6 @@ def main():
         print(f"  📊 检索相关性={ctx_rel:.1f}  忠实度={faith:.1f}  答案相关性={ans_rel:.1f}")
         print(f"  🔧 诊断：{diag}")
         results.append((q, ctx_rel, faith, ans_rel, diag))
-        print(f"  召回文档：{docs}")
-        print(f"  完整答案：{answer}")  
 
     # 汇总
     print("\n" + "=" * 60)
