@@ -233,7 +233,10 @@ def main():
         print(f"第 {i} 题：{q}")
 
         # 跑 RAG
-        docs = retrieve(client, collection, q, top_k=2)
+        # docs = retrieve(client, collection, q, top_k=2)
+        # 如果是检索相关性低 → 调整 top_k、或给那条文档补充更清晰的表述
+        # 但反而更低了
+        docs = retrieve(client, collection, q, top_k=1)
         answer = generate_answer(client, q, docs)
         docs_preview = " | ".join(d[:20] for d in docs)
         print(f"  召回文档：{docs_preview}")
@@ -248,6 +251,8 @@ def main():
         print(f"  📊 检索相关性={ctx_rel:.1f}  忠实度={faith:.1f}  答案相关性={ans_rel:.1f}")
         print(f"  🔧 诊断：{diag}")
         results.append((q, ctx_rel, faith, ans_rel, diag))
+        print(f"  召回文档：{docs}")
+        print(f"  完整答案：{answer}")  
 
     # 汇总
     print("\n" + "=" * 60)
