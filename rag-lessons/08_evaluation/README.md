@@ -134,7 +134,7 @@ EVAL_SET = [
 ## 6. 跑起来
 
 ```bash
-python lessons/08_evaluation/code.py
+python rag-lessons/08_evaluation/code.py
 ```
 
 终端会打印每道题的三维分数 + 整体诊断。重点看：分数低的题，对应哪个环节该优化。

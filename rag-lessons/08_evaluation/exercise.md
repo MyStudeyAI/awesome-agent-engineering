@@ -1,6 +1,6 @@
 # Lesson 08 练习
 
-> 改 `code.py` 里的代码，运行 `python lessons/08_evaluation/code.py` 观察变化。
+> 改 `code.py` 里的代码，运行 `python rag-lessons/08_evaluation/code.py` 观察变化。
 > 本课每个评估题要调用多次 LLM（检索+生成+3次打分），5 题约 20 次调用，成本稍高，可用 glm-4-flash。
 
 ---
