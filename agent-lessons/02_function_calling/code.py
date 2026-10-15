@@ -18,7 +18,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
 
-CHAT_MODEL = "glm-4"  # 想免费可换 "glm-4-flash"
+CHAT_MODEL = "glm-4-flash"  # 想免费可换 "glm-4-flash"
 # 智谱当前仅支持 auto，不支持 none 或强制指定某个函数。
 # https://docs.bigmodel.cn/cn/guide/capabilities/function-calling
 ZHIPU_TOOL_CHOICE = "auto"
@@ -80,6 +80,21 @@ def random_choice(items: list) -> str:
     chosen = random.choice(items)
     return f"从 {items} 中随机选了：{chosen}"
 
+def get_day_of_week(date_str: str | None = None) -> str:
+    days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    try:
+        if date_str:
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            dt = datetime.now()
+        return f"{dt.strftime('%Y-%m-%d')} 是 {days[dt.weekday()]}"
+    except ValueError:
+        return f"错误：日期格式不对，请使用 YYYY-MM-DD 格式，如 2026-06-29"
+
+
+def strict_add(a: int, b: int) -> str:
+    return str(a + b)
+
 
 # ════════════════════════════════════════════════════════════
 # 第 2 步：工具注册表 + tools 定义
@@ -92,6 +107,8 @@ TOOL_REGISTRY = {
     "calculator": calculator,
     "string_length": string_length,
     "random_choice": random_choice,
+    "get_day_of_week": get_day_of_week,
+    "strict_add": strict_add,
 }
 
 TOOLS_SPEC = [
@@ -152,6 +169,23 @@ TOOLS_SPEC = [
             },
         },
     },
+    {
+        "type":"function",
+        "function":{
+            "name": "get_day_of_week",
+            "description": "根据日期字符串获取是星期几。当用户问'今天是星期几''某年某月某日是周几'时使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date_str": {
+                        "type": "string",
+                        "description": "日期字符串，格式为 YYYY-MM-DD，如 '2026-06-29'。如果不传则默认查今天。",
+                    }
+                },
+                "required": [],
+            },
+        }
+    }
 ]
 
 
@@ -186,19 +220,25 @@ def execute_function(name: str, arguments: dict) -> str:
 # ════════════════════════════════════════════════════════════
 # 第 4 步：Agent 循环（和 L01 类似，但更健壮）
 # ════════════════════════════════════════════════════════════
-def run_agent(client: ZhipuAI, user_question: str, max_steps: int = 6) -> str | None:
+def run_agent(client: ZhipuAI, user_question: str, max_steps: int = 6, enable_tools: bool = True) -> str | None:
     """运行 Agent 处理问题。"""
     messages = [{"role": "user", "content": user_question}]
 
     for step in range(1, max_steps + 1):
         print(f"\n{'─' * 50}\n🔄 第 {step} 步")
 
-        response = client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=messages,
-            tools=TOOLS_SPEC,
-            tool_choice=ZHIPU_TOOL_CHOICE,
-        )
+        if enable_tools:
+            response = client.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=messages,
+                tools=TOOLS_SPEC,
+                tool_choice=ZHIPU_TOOL_CHOICE,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=messages,
+            )
         msg = response.choices[0].message
 
         if msg.tool_calls:
@@ -238,26 +278,43 @@ def main():
     client = create_client()
 
     # 实验 1：正常调用（看工具调度器怎么分发）
-    print("\n\n" + "═" * 60)
-    print("实验 1：正常调用多工具")
-    print("═" * 60)
-    run_agent(client, "北京和上海今天天气怎么样？'你好世界'有几个字？")
+    # print("\n\n" + "═" * 60)
+    # print("实验 1：正常调用多工具")
+    # print("═" * 60)
+    # run_agent(client, "北京和上海今天天气怎么样？'你好世界'有几个字？")
 
-    # 实验 2：错误处理（故意触发除以 0）
-    print("\n\n" + "═" * 60)
-    print("实验 2：错误处理（故意触发错误）")
-    print("═" * 60)
-    run_agent(client, "帮我算一下 10 / 0 等于多少？")
+    # # 实验 2：错误处理（故意触发除以 0）
+    # print("\n\n" + "═" * 60)
+    # print("实验 2：错误处理（故意触发错误）")
+    # print("═" * 60)
+    # run_agent(client, "帮我算一下 10 / 0 等于多少？")
 
-    # 实验 3：多轮调用（一个任务需要多个工具配合）
+    # # 实验 3：多轮调用（一个任务需要多个工具配合）
+    # print("\n\n" + "═" * 60)
+    # print("实验 3：多轮调用（多个工具配合）")
+    # print("═" * 60)
+    # run_agent(
+    #     client,
+    #     "帮我随机从['红','绿','蓝']选一个颜色，"
+    #     "然后算一下这个颜色名有几个字，再告诉我北京天气。",
+    # )
+
+    # 实验 4：测试
     print("\n\n" + "═" * 60)
-    print("实验 3：多轮调用（多个工具配合）")
+    print("实验 4：今天是星期几？")
     print("═" * 60)
     run_agent(
         client,
-        "帮我随机从['红','绿','蓝']选一个颜色，"
-        "然后算一下这个颜色名有几个字，再告诉我北京天气。",
+        "今天是星期几？",
     )
+
+    # 在 main() 里加这些测试
+    # run_agent(client, "帮我算一下 abcdefg")          # 非法表达式
+    # run_agent(client, "帮我查一下火星的天气")           # 不支持的城市
+    # run_agent(client, "帮我从一个空列表里随机选")        # 空列表
+
+    # auto：智谱支持的工具选择策略
+    run_agent(client, "现在北京天气怎么样", enable_tools=False)
 
     print("\n" + "=" * 60)
     print("完成！核心要点：通用调度器 + 错误兜底 = 健壮的 Agent。")
