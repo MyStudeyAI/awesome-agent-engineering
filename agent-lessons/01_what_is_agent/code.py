@@ -19,7 +19,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
 
-CHAT_MODEL = "glm-4"  # 想免费可换 "glm-4-flash"
+CHAT_MODEL = "glm-4-flash"  # 想免费可换 "glm-4-flash"
 
 
 def create_client() -> ZhipuAI:
@@ -181,6 +181,7 @@ def run_agent(client: ZhipuAI, user_question: str, max_steps: int = 5):
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",  # auto = 让 LLM 自己决定要不要用工具
+            # tool_choice="none"
         )
         msg = response.choices[0].message
 
@@ -232,17 +233,17 @@ def main():
 
     client = create_client()
 
-    # 问题 1：只需一个工具（查时间）
-    print("\n\n" + "═" * 60)
-    print("问题 1：现在几点了？")
-    print("═" * 60)
-    run_agent(client, "现在几点了？")
+    # # 问题 1：只需一个工具（查时间）
+    # print("\n\n" + "═" * 60)
+    # print("问题 1：现在几点了？")
+    # print("═" * 60)
+    # run_agent(client, "现在几点了？")
 
-    # 问题 2：需要两个工具配合（先查时间，再算差值）
-    print("\n\n" + "═" * 60)
-    print("问题 2：现在是几点？距离今天 18:00 还有多少分钟？")
-    print("═" * 60)
-    run_agent(client, "现在是几点？距离今天 18:00 还有多少分钟？（请用计算器算）")
+    # # 问题 2：需要两个工具配合（先查时间，再算差值）
+    # print("\n\n" + "═" * 60)
+    # print("问题 2：现在是几点？距离今天 18:00 还有多少分钟？")
+    # print("═" * 60)
+    # run_agent(client, "现在是几点？距离今天 18:00 还有多少分钟？（请用计算器算）")
 
     # 问题 3：不需要工具（看 Agent 会不会跳过工具） "帮我算一下 abc + 123"
     print("\n\n" + "═" * 60)
@@ -250,11 +251,17 @@ def main():
     print("═" * 60)
     run_agent(client, "帮我算一下 abc + 123")
 
-    # 问题 4：今天星期几？是星期四嘛？后天星期几啊？
+    # # 问题 4：今天星期几？是星期四嘛？后天星期几啊？
+    # print("\n\n" + "═" * 60)
+    # print("问题 4：今天星期几？是星期四嘛？后天星期几啊？")
+    # print("═" * 60)
+    # run_agent(client, "今天星期几？是星期四嘛？后天星期几啊？")
+
+    # 问题 5："今天是几号？把这个日期的数字乘以 2 等于多少？"
     print("\n\n" + "═" * 60)
-    print("问题 4：今天星期几？是星期四嘛？后天星期几啊？")
+    print("问题 5：今天是几号？把这个日期的数字乘以 2 等于多少？")
     print("═" * 60)
-    run_agent(client, "今天星期几？是星期四嘛？后天星期几啊？")
+    run_agent(client, "今天是几号？把这个日期的数字乘以 2 等于多少？")
 
     print("\n" + "=" * 60)
     print("完成！你刚刚看到了一个 Agent 的工作过程。")
