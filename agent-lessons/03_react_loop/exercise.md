@@ -45,7 +45,6 @@ run_react_agent(client, "现在几点？'AI'有几个字？两个数相乘多少
 
 ```python
 run_react_agent(client, "帮我把 'hello world' 的长度和当前的秒数相加")
-run_plain_agent(client, "帮我把 'hello world' 的长度和当前的秒数相加")
 ```
 
 **思考**：当 Agent 给出错答案时，哪种模式更容易定位 bug？这就是 ReAct 在生产调试中的价值。

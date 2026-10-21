@@ -8,6 +8,7 @@ L03 — ReAct：思考-行动-观察循环（面试核心）
 """
 from __future__ import annotations
 
+import re
 import json
 import os
 from datetime import datetime
@@ -15,8 +16,9 @@ from datetime import datetime
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
 
-CHAT_MODEL = "glm-4"  # 想免费可换 "glm-4-flash"
+CHAT_MODEL = "glm-4-flash"  # 想免费可换 "glm-4-flash"
 MAX_STEPS = 10  # ReAct 循环最大步数，防止死循环
+# MAX_STEPS = 2
 
 
 def create_client() -> ZhipuAI:
@@ -223,6 +225,129 @@ def run_plain_agent(client: ZhipuAI, user_question: str, max_steps: int = MAX_ST
     return None
 
 
+
+# ════════════════════════════════════════════════════════════
+# 纯 ReAct prompt（不依赖 function calling）
+# ════════════════════════════════════════════════════════════
+PURE_REACT_PROMPT = """你是一个会使用工具的智能助手。请严格按 ReAct 格式工作。
+可用工具：
+1. get_current_time
+   - 描述：获取当前日期和时间
+   - 参数：无（Action Input 写 {}）
+2. calculator
+   - 描述：计算数学表达式
+   - 参数：{"expression": "数学表达式，如 '12*34'"}
+3. string_length
+   - 描述：计算字符串的字符数
+   - 参数：{"text": "要计算的字符串"}
+
+【输出格式】每次回复只能是下面两种之一：
+
+格式 A —— 需要调用工具时：
+Thought: 你的思考过程（我为什么要调用这个工具）
+Action: 工具名
+Action Input: 工具参数的 JSON 对象
+
+格式 B —— 已经能回答时：
+Thought: 你的思考过程
+Final Answer: 最终答案
+
+【硬性规则】
+- 每轮只能输出一个 Action，严禁一次写多个 Action
+- Action Input 必须是合法 JSON，用双引号
+- 不要自己编造 Observation，等系统给你
+- 收到 Observation 后再开始下一轮 Thought
+"""
+
+# 解析器（纯 ReAct 的关键脆弱点所在）
+def parse_react_output(text: str):
+    """返回 (kind, payload):
+       ("final", answer_str)
+       ("action", (action_name, action_input_dict))
+       ("error", err_msg)
+    """
+    if not text:
+        return "error", "模型返回空内容"
+
+    # 1) 优先判断 Final Answer
+    if "Final Answer:" in text:
+        ans = text.split("Final Answer:", 1)[1].strip()
+        return "final", ans
+
+    # 2) 抓 Action 名（兼容中英文冒号）
+    action_match = re.search(r"Action\s*[:：]\s*(\w+)", text)
+    if not action_match:
+        return "error", "找不到 Action 字段"
+
+    action = action_match.group(1)
+
+    # 3) 抓 Action Input 的 JSON（贪婪匹配到最后一个 }，避免被嵌套截断）
+    input_match = re.search(r"Action Input\s*[:：]\s*(\{.*\})", text, re.DOTALL)
+    if not input_match:
+        return "error", "找不到 Action Input"
+
+    raw = input_match.group(1).strip()
+    try:
+        args = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return "error", f"Action Input 不是合法 JSON：{raw}（{e}）"
+
+    return "action", (action, args)
+
+
+# 纯 ReAct loop
+def run_pure_react_agent(client, user_question: str, max_steps: int = MAX_STEPS):
+    messages = [
+        {"role": "system", "content": PURE_REACT_PROMPT},
+        {"role": "user", "content": user_question},
+    ]
+
+    for step in range(1, max_steps + 1):
+        print(f"\n{'━' * 50}")
+        print(f"🔄 纯 ReAct 第 {step} 轮")
+
+        # ★ 关键：只传 messages，不再传 tools / tool_choice
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=messages,
+        )
+        content = (response.choices[0].message.content or "").strip()
+        print(f"📝 模型原始输出：\n{content}")
+
+        kind, payload = parse_react_output(content)
+        
+        # ── 情况 1：Final Answer → 结束
+        if kind == "final":
+            print(f"\n✅ Agent 给出最终答案：{payload}")
+            return payload
+
+        # ── 情况 2：解析失败 → 把原文 + 报错回灌让模型重试
+        if kind == "error":
+            print(f"⚠️ 解析失败：{payload}")
+            messages.append({"role": "assistant", "content": content})
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"Observation: 系统解析失败：{payload}。"
+                    "请严格按 ReAct 格式重新输出。"
+                ),
+            })
+            continue
+
+        # ── 情况 3：Action → 执行工具，把 Observation 回灌
+        action, action_input = payload
+        print(f"🔧 Action: {action}({action_input})")
+        observation = execute_function(action, action_input)
+        print(f"👁️ Observation: {observation}")
+
+        # ★ 关键：工具结果以 user 消息回灌（纯文本协议没有 tool role）
+        messages.append({"role": "assistant", "content": content})
+        messages.append({"role": "user", "content": f"Observation: {observation}"})
+
+    print(f"\n⚠️ 达到最大步数 {max_steps}，被迫停止。")
+    return None
+
+
 # ════════════════════════════════════════════════════════════
 # 主流程
 # ════════════════════════════════════════════════════════════
@@ -237,9 +362,18 @@ def main():
     print("\n\n" + "═" * 60)
     print("实验 1：ReAct Agent 的完整推理链")
     print("═" * 60)
+    # run_react_agent(
+    #     client,
+    #     "现在几点？请把当前小时数和分钟数相加，再用结果除以 7，告诉我余数是多少。",
+    # )
+    # run_react_agent(
+    #         client,
+    #         "现在几点？请把当前小时数和分钟数相加，"
+    #         "再用结果除以 7，告诉我余数是多少。"
+    # )
     run_react_agent(
-        client,
-        "现在几点？请把当前小时数和分钟数相加，再用结果除以 7，告诉我余数是多少。",
+        client, 
+        "帮我把 'hello world' 的长度和当前的秒数相加"
     )
 
     # 实验 2：对比原生 function calling（没有 Thought）
@@ -251,6 +385,15 @@ def main():
     #     client,
     #     "现在是几点？'人工智能'这四个字有几个字？把这两个数字相乘等于多少？",
     # )
+
+    # 实验 3: 纯ReAct (不依赖 function calling, 只用prompt约束)
+    print("\n\n" + "═" * 60)
+    print("实验 3: 纯ReAct (不依赖 function calling, 只用prompt约束)")
+    print("═" * 60)
+    run_pure_react_agent(
+        client,
+        "现在几点？请把当前小时数和分钟数相加，再用结果除以 7，告诉我余数是多少。",
+    )
 
     # print("\n\n" + "═" * 60)
     # print("对比要点：")
