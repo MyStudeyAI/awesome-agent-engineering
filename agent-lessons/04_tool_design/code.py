@@ -9,6 +9,7 @@ L04 — 多工具与工具设计
 
 运行：python agent-lessons/04_tool_design/code.py
 """
+
 from __future__ import annotations
 
 import json
@@ -35,8 +36,11 @@ def create_client() -> ZhipuAI:
 
 def get_weather(city: str, unit: str = "摄氏度") -> str:
     weather_map = {
-        "北京": ("晴", 25), "上海": ("多云", 28), "广州": ("雨", 30),
-        "深圳": ("阴", 29), "杭州": ("晴", 26),
+        "北京": ("晴", 25),
+        "上海": ("多云", 28),
+        "广州": ("雨", 30),
+        "深圳": ("阴", 29),
+        "杭州": ("晴", 26),
     }
     if city not in weather_map:
         return f"抱歉，没有 {city} 的天气数据。支持：{list(weather_map.keys())}"
@@ -92,6 +96,24 @@ def unit_convert(value: float, from_unit: str, to_unit: str) -> str:
     result = convert_map[key](value)
     return f"{value}{from_unit} = {result:.2f}{to_unit}"
 
+def do_anything(task: str) -> str:
+    """万能工具：假装什么都能做。"""
+    return f"我不会处理 '{task}'，请使用更具体的工具。"
+
+def is_palindrome(text: str) -> str:
+    """判断字符串是否为回文（忽略大小写与非字母数字可选）。"""
+    s = str(text).strip().lower()
+    left = 0
+    right = len(str) - 1
+    while left < right:
+        if str[left] != str[right]:
+            return f"'{text}' 不是回文"
+
+        left += 1
+        right -= 1
+
+    return f"'{text}' 是回文"
+
 
 # ──────────────────────────────────────────────────────────────
 # 好的 description 版本（清晰具体）
@@ -103,106 +125,226 @@ TOOL_REGISTRY = {
     "string_reverse": string_reverse,
     "list_sort": list_sort,
     "unit_convert": unit_convert,
+    "do_anything": do_anything,
+    "is_palindrome": is_palindrome,
 }
 
 TOOLS_SPEC_GOOD = [
-    {"type": "function", "function": {
-        "name": "get_weather",
-        "description": "查询指定城市的实时天气。当用户问'XX天气''XX下雨吗''气温多少度'时使用。不支持查询非城市（如国家、星球）。",
-        "parameters": {"type": "object", "properties": {
-            "city": {"type": "string", "description": "城市名，如'北京'"},
-            "unit": {"type": "string", "enum": ["摄氏度", "华氏度"], "description": "温度单位，默认摄氏度"},
-        }, "required": ["city"]},
-    }},
-    {"type": "function", "function": {
-        "name": "calculator",
-        "description": "计算数学表达式（四则运算）。需要精确计算加减乘除时使用。expression 是数学表达式，如 '12*34' 或 '(1+2)*3'。注意：不能解方程、不能求导。",
-        "parameters": {"type": "object", "properties": {
-            "expression": {"type": "string", "description": "数学表达式，如 '3 * (4 + 5)'"},
-        }, "required": ["expression"]},
-    }},
-    {"type": "function", "function": {
-        "name": "string_length",
-        "description": "计算字符串的字符数（长度）。当用户问'XX有几个字''XX多长''XX长度'时使用。",
-        "parameters": {"type": "object", "properties": {
-            "text": {"type": "string", "description": "要计算长度的字符串"},
-        }, "required": ["text"]},
-    }},
-    {"type": "function", "function": {
-        "name": "string_reverse",
-        "description": "把字符串反转（首尾倒过来）。当用户说'倒序''反转''逆序输出'时使用。",
-        "parameters": {"type": "object", "properties": {
-            "text": {"type": "string", "description": "要反转的字符串"},
-        }, "required": ["text"]},
-    }},
-    {"type": "function", "function": {
-        "name": "list_sort",
-        "description": "对一组数字进行升序排序（从小到大）。当用户说'排序''从小到大排''整理这组数字'时使用。",
-        "parameters": {"type": "object", "properties": {
-            "numbers": {"type": "array", "items": {"type": "number"}, "description": "要排序的数字列表，如 [3, 1, 4, 1, 5]"},
-        }, "required": ["numbers"]},
-    }},
-    {"type": "function", "function": {
-        "name": "unit_convert",
-        "description": "单位换算。支持：米↔千米、摄氏度↔华氏度。当用户问'XX米等于多少千米''XX摄氏度等于多少华氏度'时使用。",
-        "parameters": {"type": "object", "properties": {
-            "value": {"type": "number", "description": "要换算的数值"},
-            "from_unit": {"type": "string", "description": "原始单位，如'米'、'摄氏度'"},
-            "to_unit": {"type": "string", "description": "目标单位，如'千米'、'华氏度'"},
-        }, "required": ["value", "from_unit", "to_unit"]},
-    }},
-    {"type": "function", "function": {
-    "name": "do_anything",
-    "description": "处理各种任务。当你不确定用哪个工具时，可以用这个。",
-    "parameters": {"type": "object", "properties": {
-        "task": {"type": "string"}
-    }, "required": ["task"]},
-    }}
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "查询指定城市的实时天气。当用户问'XX天气''XX下雨吗''气温多少度'时使用。不支持查询非城市（如国家、星球）。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "城市名，如'北京'"},
+                    "unit": {
+                        "type": "string",
+                        "enum": ["摄氏度", "华氏度"],
+                        "description": "温度单位，默认摄氏度",
+                    },
+                },
+                "required": ["city"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "计算数学表达式（四则运算）。需要精确计算加减乘除时使用。expression 是数学表达式，如 '12*34' 或 '(1+2)*3'。注意：不能解方程、不能求导。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "数学表达式，如 '3 * (4 + 5)'",
+                    },
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "string_length",
+            "description": "计算字符串的字符数（长度）。当用户问'XX有几个字''XX多长''XX长度'时使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "要计算长度的字符串"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "string_reverse",
+            "description": "把字符串反转（首尾倒过来）。当用户说'倒序''反转''逆序输出'时使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "要反转的字符串"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_sort",
+            "description": "对一组数字进行升序排序（从小到大）。当用户说'排序''从小到大排''整理这组数字'时使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "numbers": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "要排序的数字列表，如 [3, 1, 4, 1, 5]",
+                    },
+                },
+                "required": ["numbers"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "unit_convert",
+            "description": "单位换算。支持：米↔千米、摄氏度↔华氏度。当用户问'XX米等于多少千米''XX摄氏度等于多少华氏度'时使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "value": {"type": "number", "description": "要换算的数值"},
+                    "from_unit": {
+                        "type": "string",
+                        "description": "原始单位，如'米'、'摄氏度'",
+                    },
+                    "to_unit": {
+                        "type": "string",
+                        "description": "目标单位，如'千米'、'华氏度'",
+                    },
+                },
+                "required": ["value", "from_unit", "to_unit"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "do_anything",
+            "description": "处理各种任务。当你不确定用哪个工具时，可以用这个。",
+            "parameters": {
+                "type": "object",
+                "properties": {"task": {"type": "string"}},
+                "required": ["task"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function":{
+            "name": "is_palindrome",
+            "description": "判断一个字符串是否为回文（正读反读完全一样，如 '12321'、'level'）。当用户问'是不是回文''正读反读一样吗''左右对称吗'时使用。只判断字符串，不做排序或长度统计。",
+            "parameters":{
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "要判断的字符串，如 '12321'"}
+                },
+                "required": ["text"],
+            }
+        }
+    }
 ]
 
 # ──────────────────────────────────────────────────────────────
 # 差的 description 版本（模糊，故意制造选错）
 # ──────────────────────────────────────────────────────────────
 TOOLS_SPEC_BAD = [
-    {"type": "function", "function": {
-        "name": "get_weather",
-        "description": "查询功能。",  # 极其模糊
-        "parameters": {"type": "object", "properties": {
-            "city": {"type": "string"}}, "required": ["city"]},
-    }},
-    {"type": "function", "function": {
-        "name": "calculator",
-        "description": "处理数字。",  # 模糊
-        "parameters": {"type": "object", "properties": {
-            "expression": {"type": "string"}}, "required": ["expression"]},
-    }},
-    {"type": "function", "function": {
-        "name": "string_length",
-        "description": "处理字符串。",  # 和 string_reverse 重叠！
-        "parameters": {"type": "object", "properties": {
-            "text": {"type": "string"}}, "required": ["text"]},
-    }},
-    {"type": "function", "function": {
-        "name": "string_reverse",
-        "description": "处理字符串。",  # 和 string_length 重叠！
-        "parameters": {"type": "object", "properties": {
-            "text": {"type": "string"}}, "required": ["text"]},
-    }},
-    {"type": "function", "function": {
-        "name": "list_sort",
-        "description": "处理数据。",  # 模糊
-        "parameters": {"type": "object", "properties": {
-            "numbers": {"type": "array", "items": {"type": "number"}}}, "required": ["numbers"]},
-    }},
-    {"type": "function", "function": {
-        "name": "unit_convert",
-        "description": "单位换算。支持米↔千米、摄氏度↔华氏度。当用户问'XX米等于多少千米'时使用。",  # 模糊
-        "parameters": {"type": "object", "properties": {
-            "value": {"type": "number"},
-            "from_unit": {"type": "string"},
-            "to_unit": {"type": "string"},
-        }, "required": ["value", "from_unit", "to_unit"]},
-    }},
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "查询功能。",  # 极其模糊
+            "parameters": {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "处理数字。",  # 模糊
+            "parameters": {
+                "type": "object",
+                "properties": {"expression": {"type": "string"}},
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "string_length",
+            "description": "处理字符串。",  # 和 string_reverse 重叠！
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "string_reverse",
+            "description": "处理字符串。",  # 和 string_length 重叠！
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_sort",
+            "description": "处理数据。",  # 模糊
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "numbers": {"type": "array", "items": {"type": "number"}}
+                },
+                "required": ["numbers"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "unit_convert",
+            # "description": "单位换算。支持米↔千米、摄氏度↔华氏度。当用户问'XX米等于多少千米'时使用。",  # 模糊
+            "description": "单位换算。", 
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "value": {"type": "number"},
+                    "from_unit": {"type": "string"},
+                    "to_unit": {"type": "string"},
+                },
+                "required": ["value", "from_unit", "to_unit"],
+            },
+        },
+    },
 ]
 
 
@@ -210,45 +352,82 @@ TOOLS_SPEC_BAD = [
 # 极限差的 description 版本（参数名也混淆）
 # ──────────────────────────────────────────────────────────────
 TOOLS_SPEC_BAD_EXTREME = [
-    {"type": "function", "function": {
-        "name": "get_weather",
-        "description": "获取数据。",
-        "parameters": {"type": "object", "properties": {
-            "p1": {"type": "string"}}, "required": ["p1"]},
-    }},
-    {"type": "function", "function": {
-        "name": "calculator",
-        "description": "计算。",
-        "parameters": {"type": "object", "properties": {
-            "p1": {"type": "string"}}, "required": ["p1"]},
-    }},
-    {"type": "function", "function": {
-        "name": "string_length",
-        "description": "操作文本。",
-        "parameters": {"type": "object", "properties": {
-            "p1": {"type": "string"}}, "required": ["p1"]},
-    }},
-    {"type": "function", "function": {
-        "name": "string_reverse",
-        "description": "操作文本。",
-        "parameters": {"type": "object", "properties": {
-            "p1": {"type": "string"}}, "required": ["p1"]},
-    }},
-    {"type": "function", "function": {
-        "name": "list_sort",
-        "description": "处理。",
-        "parameters": {"type": "object", "properties": {
-            "p1": {"type": "array", "items": {"type": "number"}}}, "required": ["p1"]},
-    }},
-    {"type": "function", "function": {
-        "name": "unit_convert",
-        "description": "转换。",
-        "parameters": {"type": "object", "properties": {
-            "p1": {"type": "number"},
-            "p2": {"type": "string"},
-            "p3": {"type": "string"},
-        }, "required": ["p1", "p2", "p3"]},
-    }},
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "获取数据。",
+            "parameters": {
+                "type": "object",
+                "properties": {"p1": {"type": "string"}},
+                "required": ["p1"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "计算。",
+            "parameters": {
+                "type": "object",
+                "properties": {"p1": {"type": "string"}},
+                "required": ["p1"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "string_length",
+            "description": "操作文本。",
+            "parameters": {
+                "type": "object",
+                "properties": {"p1": {"type": "string"}},
+                "required": ["p1"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "string_reverse",
+            "description": "操作文本。",
+            "parameters": {
+                "type": "object",
+                "properties": {"p1": {"type": "string"}},
+                "required": ["p1"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_sort",
+            "description": "处理。",
+            "parameters": {
+                "type": "object",
+                "properties": {"p1": {"type": "array", "items": {"type": "number"}}},
+                "required": ["p1"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "unit_convert",
+            "description": "转换。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "p1": {"type": "number"},
+                    "p2": {"type": "string"},
+                    "p3": {"type": "string"},
+                },
+                "required": ["p1", "p2", "p3"],
+            },
+        },
+    },
 ]
 
 # 极限坏版的参数映射：把 p1/p2/p3 映射回真实参数名
@@ -277,10 +456,29 @@ def execute_function(name: str, arguments: dict, extreme: bool = False) -> str:
     except Exception as e:
         return f"工具执行失败：{e}"
 
+def select_relevant_tools(question: str) -> list:
+    """根据问题简单判断该加载哪类工具。"""
+    if any(k in question for k in ["天气", "气温", "下雨"]):
+        return [t for t in TOOLS_SPEC_GOOD if t["function"]["name"] == "get_weather"]
+    if any(k in question for k in ["计算", "加", "减", "乘", "除"]):
+        return [t for t in TOOLS_SPEC_GOOD if t["function"]["name"] == "calculator"]
+    return TOOLS_SPEC_GOOD  # 默认全给
 
-def run_agent(client: ZhipuAI, question: str, tools_spec: list, max_steps: int = 6, extreme: bool = False, model: str = None) -> str | None:
+
+
+def run_agent(
+    client: ZhipuAI,
+    question: str,
+    tools_spec: list,
+    max_steps: int = 6,
+    extreme: bool = False,
+    model: str = None,
+    dynamic = False
+) -> str | None:
     """运行 Agent，用指定的 tools_spec（好版/差版）。extreme=True 时参数名需要映射。"""
     _model = model or CHAT_MODEL
+    if dynamic:
+        tools_spec = select_relevant_tools(question)
     messages = [{"role": "user", "content": question}]
     used_tools = []  # 记录用过哪些工具，供分析
 
@@ -297,7 +495,9 @@ def run_agent(client: ZhipuAI, question: str, tools_spec: list, max_steps: int =
                 result = execute_function(name, args, extreme=extreme)
                 used_tools.append(name)
                 print(f"  第{step}步 调用 {name}({args}) → {result[:50]}")
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                messages.append(
+                    {"role": "tool", "tool_call_id": tc.id, "content": result}
+                )
         else:
             print(f"  回答：{msg.content[:80]}")
             return msg.content
@@ -320,52 +520,56 @@ def main():
     run_agent(
         client_strong,
         "帮我把 5 千米换算成米，然后把结果和 1234 相加，最后算 '人工智能' 有几个字。",
+        # "帮我判断 1234554321和 1234321是回文串吗?",
         TOOLS_SPEC_GOOD,
+        dynamic=True,
     )
 
     # ════════════════════════════════════════════════════════════
     # 实验 2：glm-4 + 极限坏 spec → glm-4 可能还能猜对
     # ════════════════════════════════════════════════════════════
-    print("\n\n" + "═" * 60)
-    print("实验 2：强模型 + 极限坏 description（参数名也混淆）")
-    print("═" * 60)
-    print("（glm-4 太强了，即使参数都叫 p1/p2/p3，它还是能通过参数类型和数量推理出来）\n")
-    run_agent(
-        client_strong,
-        "帮我把 5 千米换算成米，然后把结果和 1234 相加，最后算 '人工智能' 有几个字。",
-        TOOLS_SPEC_BAD_EXTREME,
-        extreme=True,
-    )
+    # print("\n\n" + "═" * 60)
+    # print("实验 2：强模型 + 极限坏 description（参数名也混淆）")
+    # print("═" * 60)
+    # print(
+    #     "（glm-4 太强了，即使参数都叫 p1/p2/p3，它还是能通过参数类型和数量推理出来）\n"
+    # )
+    # run_agent(
+    #     client_strong,
+    #     "帮我把 5 千米换算成米，然后把结果和 1234 相加，最后算 '人工智能' 有几个字。",
+    #     TOOLS_SPEC_BAD_EXTREME,
+    #     extreme=True,
+    # )
 
     # ════════════════════════════════════════════════════════════
     # 实验 3：glm-4-flash + 极限坏 spec → 对比弱模型
     # ════════════════════════════════════════════════════════════
-    print("\n\n" + "═" * 60)
-    print("实验 3：弱模型 glm-4-flash + 极限坏 description（关键对比！）")
-    print("═" * 60)
-    print("（同样的问题和工具，但换成 glm-4-flash——观察弱模型会不会翻车）\n")
-    run_agent(
-        client_strong,
-        "帮我把 5 千米换算成米，然后把结果和 1234 相加，最后算 '人工智能' 有几个字。",
-        TOOLS_SPEC_BAD_EXTREME,
-        extreme=True,
-        model="glm-4-flash",
-    )
+    # print("\n\n" + "═" * 60)
+    # print("实验 3：弱模型 glm-4-flash + 极限坏 description（关键对比！）")
+    # print("═" * 60)
+    # print("（同样的问题和工具，但换成 glm-4-flash——观察弱模型会不会翻车）\n")
+    # run_agent(
+    #     client_strong,
+    #     "帮我把 5 千米换算成米，然后把结果和 1234 相加，最后算 '人工智能' 有几个字。",
+    #     TOOLS_SPEC_BAD_EXTREME,
+    #     extreme=True,
+    #     model="glm-4-flash",
+    # )
 
     # ════════════════════════════════════════════════════════════
     # 实验 4：功能重叠 + 弱模型 → 选错概率最高
     # ════════════════════════════════════════════════════════════
-    print("\n\n" + "═" * 60)
-    print("实验 4：弱模型 + 功能重叠（list_sort vs calculator 无法区分）")
-    print("═" * 60)
-    print("（所有工具描述都极模糊，试试 glm-4-flash 能不能选对 list_sort）\n")
-    run_agent(
-        client_strong,
-        "帮我把 3,1,4,1,5,9,2,6 这组数字排序。",
-        TOOLS_SPEC_BAD_EXTREME,
-        extreme=True,
-        model="glm-4-flash",
-    )
+    # print("\n\n" + "═" * 60)
+    # print("实验 4：弱模型 + 功能重叠（list_sort vs calculator 无法区分）")
+    # print("═" * 60)
+    # print("（所有工具描述都极模糊，试试 glm-4-flash 能不能选对 list_sort）\n")
+    # run_agent(
+    #     client_strong,
+    #     "帮我把 3,1,4,1,5,9,2,6 这组数字排序。",
+    #     TOOLS_SPEC_BAD_EXTREME,
+    #     extreme=True,
+    #     model="glm-4-flash",
+    # )
 
     print("\n" + "═" * 60)
     print("对比要点：")
