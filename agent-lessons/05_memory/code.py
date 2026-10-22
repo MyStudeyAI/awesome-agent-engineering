@@ -11,12 +11,13 @@ L05 — 记忆：让 Agent 记住上下文
 from __future__ import annotations
 
 import json
+import chromadb
 import os
 
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
 
-CHAT_MODEL = "glm-4"  # 想免费可换 "glm-4-flash"
+CHAT_MODEL = "glm-4-flash"  # 想免费可换 "glm-4-flash"
 
 
 def create_client() -> ZhipuAI:
@@ -84,6 +85,19 @@ def summarize_history(client: ZhipuAI, old_messages: list) -> str:
         f"{history_text}"
     )
     return "[之前的对话摘要] " + chat(client, [{"role": "user", "content": prompt}])
+
+# 上面是每轮都压缩，而是当消息超过阈值时才压缩一次
+class MemoryManager:
+    def __init__(self, threshold=10, keep_recent=4):
+        self.threshold = threshold  # 超过这个数才压缩
+        self.keep_recent = keep_recent
+
+    def manage(self, client, messages):
+        other = [m for m in messages if m["role"] != "system"]
+        if len(other) > self.threshold:
+            print(f"  [MemoryManager] 消息数 {len(other)} > {self.threshold}，触发压缩")
+            return compress_with_summary(client, messages, self.keep_recent)
+        return messages.copy()  # 没超阈值，不压缩
 
 
 def compress_with_summary(client: ZhipuAI, messages: list, keep_recent: int = 4) -> list:
@@ -185,7 +199,8 @@ def demo_strategies(client: ZhipuAI):
 
     # 策略 3：摘要压缩
     print(f"\n【摘要压缩】正在用模型压缩旧历史...")
-    m3 = compress_with_summary(client, long_messages, keep_recent=4)
+    # m3 = compress_with_summary(client, long_messages, keep_recent=4)
+    m3 = MemoryManager(threshold=10, keep_recent=4).manage(client, long_messages)
     print(f"{len(m3)} 条消息，约 {estimate_tokens(m3)} tokens")
     print(f"  保留的内容：")
     for m in m3:
@@ -226,10 +241,92 @@ def demo_forgetting(client: ZhipuAI):
 
     # 用截断策略（只留最近 4 条 = 2 轮，把"我叫李四"截掉了）
     trunc_msgs = truncate_messages(messages, keep_last=4) + [{"role": "user", "content": question}]
+    # trunc_msgs = truncate_messages(messages, keep_last=8) + [{"role": "user", "content": question}]
+
     print(f"【截断 keep_last=4】回答：{chat(client, trunc_msgs)}")
 
     print("\n👉 观察：全保留能答出'李四'；截断可能答不出（因为'我叫李四'被截掉了）。")
     print("   这就是截断的代价——省了 token，但丢了早期信息。摘要策略能缓解。")
+
+# ════════════════════════════════════════════════════════════
+# 实验 4：交互式
+# ════════════════════════════════════════════════════════════
+def interactive_mode(client):
+    messages = [{"role": "system", "content": "你是友好的助手。"}]
+    print("输入问题聊天，输 exit 退出。")
+    while True:
+        user = input("🙋 ").strip()
+        if user.lower() in ("exit", "quit"): break
+        messages.append({"role": "user", "content": user})
+        reply = chat(client, messages)
+        print(f"🤖 {reply}")
+        messages.append({"role": "assistant", "content": reply})
+
+
+# ════════════════════════════════════════════════════════════
+# 实验 5：长期记忆（对历史对话做 RAG）
+# ════════════════════════════════════════════════════════════
+def build_long_memory():
+    """初始化持久化向量库（存到 ./memory_db 目录，重启不丢）"""
+    chroma_client = chromadb.PersistentClient(path="./memory_db")
+    return chroma_client.get_or_create_collection(name="chat_history")
+
+def save_turn(collection, user_msg: str, assistant_msg: str,
+              turn_id: int, session_id: str = "default"):
+    """把一轮对话存进向量库"""
+    doc = f"用户：{user_msg}\n助手：{assistant_msg}"
+    collection.add(
+        documents=[doc],
+        metadatas=[{"session_id": session_id, "turn": turn_id}],
+        ids=[f"{session_id}-{turn_id}"],   # id 必须唯一
+    )
+
+def retrieve_memory(collection, query: str, n_results: int = 3) -> str:
+    """用当前问题检索相关历史"""
+    count = collection.count()
+    if count == 0:
+        return ""
+    n = min(n_results, count)              # 防止 n_results > 文档数报错
+    results = collection.query(query_texts=[query], n_results=n)
+    docs = results.get("documents", [[]])[0]
+    return "\n---\n".join(docs) if docs else ""
+
+def interactive_with_long_memory(client):
+    """带长期记忆的交互式对话"""
+    collection = build_long_memory()
+    messages = [{"role": "system", "content": "你是友好的助手。"}]
+    turn_id = 0
+    print("输入问题聊天，输 exit 退出。（长期记忆已开启）")
+    while True:
+        user = input("🙋 ").strip()
+        if user.lower() in ("exit", "quit"):
+            break
+
+        # 1) 用当前问题检索相关历史
+        memory = retrieve_memory(collection, user, n_results=3)
+
+        # 2) 把检索到的历史注入 system prompt
+        system_content = "你是友好的助手。"
+        if memory:
+            system_content += (
+                "\n\n以下是用户过去的相关对话，请参考这些信息回答：\n" + memory
+            )
+
+        # 3) 本次请求 = 新 system + 短期历史 + 当前问题
+        current_messages = [{"role": "system", "content": system_content}]
+        current_messages += messages[1:]          # 跳过旧 system
+        current_messages.append({"role": "user", "content": user})
+
+        reply = chat(client, current_messages)
+        print(f"🤖 {reply}")
+
+        # 4) 更新短期记忆
+        messages.append({"role": "user", "content": user})
+        messages.append({"role": "assistant", "content": reply})
+
+        # 5) 写入长期记忆
+        save_turn(collection, user, reply, turn_id)
+        turn_id += 1
 
 
 def main():
@@ -239,10 +336,11 @@ def main():
 
     client = create_client()
 
-    demo_multi_turn(client)
-    demo_strategies(client)
-    demo_forgetting(client)
-
+    # demo_multi_turn(client)
+    # demo_strategies(client)
+    # demo_forgetting(client)
+    # interactive_mode(client)
+    interactive_with_long_memory(client)
     print("\n" + "=" * 60)
     print("完成！记忆 = messages 列表管理。三种策略各有取舍。")
     print("💡 长期记忆 = 对对话历史做 RAG（复用你 RAG 课的知识）。")
